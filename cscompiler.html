@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C# to NASM Linux Compiler IDE</title>
+<style>
+  :root {
+    --bg-main: #ffffff;
+    --bg-panel: #ffffff;
+    --border-color: #e2e8f0;
+    --border-focus: #3b82f6;
+    --text-primary: #0f172a;
+    --text-muted: #64748b;
+    --btn-primary: #0f172a;
+    --btn-primary-text: #ffffff;
+    --btn-hover: #334155;
+    --accent: #2563eb;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header */
+  header {
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-badge {
+    background: #178600;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+  }
+
+  .brand h1 {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  select, button {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    border-radius: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  select:focus, button:focus {
+    outline: none;
+    border-color: var(--border-focus);
+  }
+
+  button.btn-primary {
+    background: var(--btn-primary);
+    color: var(--btn-primary-text);
+    border-color: var(--btn-primary);
+    font-weight: 500;
+  }
+
+  button.btn-primary:hover {
+    background: var(--btn-hover);
+  }
+
+  button:hover:not(.btn-primary) {
+    background: #f8fafc;
+  }
+
+  /* Main Workspace */
+  .workspace {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    height: calc(100vh - 90px);
+    background: #ffffff;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #ffffff;
+    position: relative;
+  }
+
+  .pane:first-child {
+    border-right: 1px solid var(--border-color);
+  }
+
+  .pane-header {
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .editor-wrapper {
+    flex: 1;
+    display: flex;
+    position: relative;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .line-numbers {
+    width: 44px;
+    padding: 16px 0;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    color: #94a3b8;
+    background: #ffffff;
+    text-align: right;
+    user-select: none;
+    border-right: 1px solid #f1f5f9;
+    padding-right: 10px;
+  }
+
+  textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: #ffffff;
+    white-space: pre;
+    tab-size: 4;
+  }
+
+  /* Output code block */
+  pre#outputArea {
+    flex: 1;
+    margin: 0;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: #ffffff;
+    overflow: auto;
+    white-space: pre;
+  }
+
+  /* Status Footer */
+  footer {
+    height: 30px;
+    background: #ffffff;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+  }
+
+  .status-dot.error {
+    background: #ef4444;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-badge">C# &rarr; ASM</span>
+    <h1>C# to NASM (Linux x86-64) Compiler</h1>
+  </div>
+  <div class="controls">
+    <select id="sampleSelect" onchange="loadSample()">
+      <option value="math">Sample: Math & Expressions</option>
+      <option value="loop">Sample: While Loops & Sum</option>
+      <option value="fizzbuzz">Sample: FizzBuzz & Logic</option>
+      <option value="hello">Sample: Hello World</option>
+    </select>
+    <button onclick="compileCode()" class="btn-primary">Compile to NASM</button>
+    <button onclick="copyASM()">Copy Assembly</button>
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- Input Section -->
+  <div class="pane">
+    <div class="pane-header">
+      <span>C# Source Code (.cs)</span>
+      <span id="srcMetrics">UTF-8</span>
+    </div>
+    <div class="editor-wrapper">
+      <div class="line-numbers" id="lineNumbers">1</div>
+      <textarea id="csharpInput" spellcheck="false" placeholder="// Write C# code here..."></textarea>
+    </div>
+  </div>
+
+  <!-- Output Section -->
+  <div class="pane">
+    <div class="pane-header">
+      <span>Generated NASM Assembly (Linux Syscalls ELF64)</span>
+      <span>Target: Linux x86_64</span>
+    </div>
+    <pre id="outputArea"></pre>
+  </div>
+</div>
+
+<footer>
+  <div class="status-badge">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Ready</span>
+  </div>
+  <div>Assemble: <code>nasm -f elf64 out.asm &amp;&amp; ld out.o -o out &amp;&amp; ./out</code></div>
+</footer>
+
+<script>
+/**
+ * -------------------------------------------------------------
+ * BUILT-IN SAMPLES
+ * -------------------------------------------------------------
+ */
+const SAMPLES = {
+math: `using System;
+
+class Program {
+    static void Main() {
+        int a = 15;
+        int b = 4;
+        int sum = a + b;
+        int prod = a * b;
+        int mod = a % b;
+
+        Console.WriteLine("--- Math Operations ---");
+        Console.WriteLine(sum);
+        Console.WriteLine(prod);
+        Console.WriteLine(mod);
+    }
+}`,
+
+loop: `using System;
+
+class Program {
+    static void Main() {
+        int total = 0;
+        int i = 1;
+
+        while (i <= 5) {
+            total = total + i;
+            Console.WriteLine(total);
+            i = i + 1;
+        }
+
+        Console.WriteLine("Final Sum:");
+        Console.WriteLine(total);
+    }
+}`,
+
+fizzbuzz: `using System;
+
+class Program {
+    static void Main() {
+        int n = 1;
+        while (n <= 15) {
+            if (n % 15 == 0) {
+                Console.WriteLine("FizzBuzz");
+            } else if (n % 3 == 0) {
+                Console.WriteLine("Fizz");
+            } else if (n % 5 == 0) {
+                Console.WriteLine("Buzz");
+            } else {
+                Console.WriteLine(n);
+            }
+            n = n + 1;
+        }
+    }
+}`,
+
+hello: `using System;
+
+class Program {
+    static void Main() {
+        Console.WriteLine("Hello, Linux World!");
+        Console.WriteLine("Compiled directly to NASM x86-64 syscalls.");
+    }
+}`
+};
+
+/**
+ * -------------------------------------------------------------
+ * MINI C# LEXER
+ * -------------------------------------------------------------
+ */
+class Lexer {
+    constructor(input) {
+        this.input = input;
+        this.pos = 0;
+        this.tokens = [];
+    }
+
+    tokenize() {
+        while (this.pos < this.input.length) {
+            let ch = this.input[this.pos];
+
+            if (/\s/.test(ch)) {
+                this.pos++;
+                continue;
+            }
+
+            // Line Comments
+            if (ch === '/' && this.input[this.pos + 1] === '/') {
+                this.pos += 2;
+                while (this.pos < this.input.length && this.input[this.pos] !== '\n') this.pos++;
+                continue;
+            }
+
+            // String literals
+            if (ch === '"') {
+                this.pos++;
+                let str = '';
+                while (this.pos < this.input.length && this.input[this.pos] !== '"') {
+                    if (this.input[this.pos] === '\\') {
+                        this.pos++;
+                        let esc = this.input[this.pos++];
+                        if (esc === 'n') str += '\n';
+                        else if (esc === 't') str += '\t';
+                        else str += esc;
+                    } else {
+                        str += this.input[this.pos++];
+                    }
+                }
+                this.pos++; // skip closing quote
+                this.tokens.push({ type: 'STRING', value: str });
+                continue;
+            }
+
+            // Numbers
+            if (/[0-9]/.test(ch)) {
+                let num = '';
+                while (this.pos < this.input.length && /[0-9]/.test(this.input[this.pos])) {
+                    num += this.input[this.pos++];
+                }
+                this.tokens.push({ type: 'NUMBER', value: parseInt(num, 10) });
+                continue;
+            }
+
+            // Identifiers / Keywords
+            if (/[a-zA-Z_]/.test(ch)) {
+                let id = '';
+                while (this.pos < this.input.length && /[a-zA-Z0-9_]/.test(this.input[this.pos])) {
+                    id += this.input[this.pos++];
+                }
+                this.tokens.push({ type: 'IDENT', value: id });
+                continue;
+            }
+
+            // Multi-char operators
+            const two = this.input.substr(this.pos, 2);
+            if (['==', '!=', '<=', '>='].includes(two)) {
+                this.tokens.push({ type: 'OP', value: two });
+                this.pos += 2;
+                continue;
+            }
+
+            // Single characters
+            if ("+-*/%=<>{}(),;.".includes(ch)) {
+                this.tokens.push({ type: 'PUNCT', value: ch });
+                this.pos++;
+                continue;
+            }
+
+            throw new Error(`Unexpected character '${ch}' at position ${this.pos}`);
+        }
+        this.tokens.push({ type: 'EOF', value: null });
+        return this.tokens;
+    }
+}
+
+/**
+ * -------------------------------------------------------------
+ * MINI C# PARSER & AST
+ * -------------------------------------------------------------
+ */
+class Parser {
+    constructor(tokens) {
+        this.tokens = tokens;
+        this.cur = 0;
+    }
+
+    peek() { return this.tokens[this.cur]; }
+    consume() { return this.tokens[this.cur++]; }
+
+    match(type, val = null) {
+        let t = this.peek();
+        if (t.type === type && (val === null || t.value === val)) {
+            return this.consume();
+        }
+        return null;
+    }
+
+    expect(type, val = null) {
+        let t = this.peek();
+        if (t.type === type && (val === null || t.value === val)) {
+            return this.consume();
+        }
+        throw new Error(`Parse error: Expected token ${type} '${val}', found ${t.type} '${t.value}'`);
+    }
+
+    parseProgram() {
+        let stmts = [];
+        // Skip 'using ...;'
+        while (this.match('IDENT', 'using')) {
+            while (this.peek().type !== 'PUNCT' || this.peek().value !== ';') this.consume();
+            this.expect('PUNCT', ';');
+        }
+
+        // Handle class ... { static void Main() { ... } } wrapper
+        if (this.match('IDENT', 'class')) {
+            this.expect('IDENT'); // Class name
+            this.expect('PUNCT', '{');
+
+            // find Main method
+            while (this.peek().value === 'static' || this.peek().value === 'public' || this.peek().value === 'void') {
+                this.consume();
+            }
+
+            this.expect('IDENT', 'Main');
+            this.expect('PUNCT', '(');
+            while (this.peek().value !== ')') this.consume();
+            this.expect('PUNCT', ')');
+            this.expect('PUNCT', '{');
+
+            while (this.peek().value !== '}' && this.peek().type !== 'EOF') {
+                stmts.push(this.parseStatement());
+            }
+
+            this.expect('PUNCT', '}'); // end Main
+            this.expect('PUNCT', '}'); // end Class
+        } else {
+            // Direct Top-Level Statements
+            while (this.peek().type !== 'EOF') {
+                stmts.push(this.parseStatement());
+            }
+        }
+        return { type: 'Program', body: stmts };
+    }
+
+    parseStatement() {
+        let t = this.peek();
+
+        // Variable declaration: int x = 10;
+        if (t.type === 'IDENT' && t.value === 'int') {
+            this.consume();
+            let name = this.expect('IDENT').value;
+            let init = null;
+            if (this.match('PUNCT', '=')) {
+                init = this.parseExpression();
+            }
+            this.expect('PUNCT', ';');
+            return { type: 'VarDecl', name, init };
+        }
+
+        // While loop
+        if (t.type === 'IDENT' && t.value === 'while') {
+            this.consume();
+            this.expect('PUNCT', '(');
+            let cond = this.parseExpression();
+            this.expect('PUNCT', ')');
+            let body = this.parseBlockOrStatement();
+            return { type: 'While', cond, body };
+        }
+
+        // If statement
+        if (t.type === 'IDENT' && t.value === 'if') {
+            this.consume();
+            this.expect('PUNCT', '(');
+            let cond = this.parseExpression();
+            this.expect('PUNCT', ')');
+            let thenBranch = this.parseBlockOrStatement();
+            let elseBranch = null;
+            if (this.peek().type === 'IDENT' && this.peek().value === 'else') {
+                this.consume();
+                elseBranch = this.parseBlockOrStatement();
+            }
+            return { type: 'If', cond, thenBranch, elseBranch };
+        }
+
+        // Console.WriteLine(...)
+        if (t.type === 'IDENT' && t.value === 'Console') {
+            this.consume();
+            this.expect('PUNCT', '.');
+            let method = this.expect('IDENT').value; // Write or WriteLine
+            this.expect('PUNCT', '(');
+            let arg = this.parseExpression();
+            this.expect('PUNCT', ')');
+            this.expect('PUNCT', ';');
+            return { type: 'Print', method, arg };
+        }
+
+        // Assignment: x = expr;
+        if (t.type === 'IDENT') {
+            let name = this.consume().value;
+            this.expect('PUNCT', '=');
+            let val = this.parseExpression();
+            this.expect('PUNCT', ';');
+            return { type: 'Assign', name, val };
+        }
+
+        throw new Error(`Unexpected statement starting with '${t.value}'`);
+    }
+
+    parseBlockOrStatement() {
+        if (this.match('PUNCT', '{')) {
+            let stmts = [];
+            while (!this.match('PUNCT', '}')) {
+                stmts.push(this.parseStatement());
+            }
+            return { type: 'Block', stmts };
+        }
+        return this.parseStatement();
+    }
+
+    parseExpression() {
+        return this.parseRelational();
+    }
+
+    parseRelational() {
+        let left = this.parseAdditive();
+        while (['==', '!=', '<', '<=', '>', '>='].includes(this.peek().value)) {
+            let op = this.consume().value;
+            let right = this.parseAdditive();
+            left = { type: 'Binary', op, left, right };
+        }
+        return left;
+    }
+
+    parseAdditive() {
+        let left = this.parseMultiplicative();
+        while (this.peek().value === '+' || this.peek().value === '-') {
+            let op = this.consume().value;
+            let right = this.parseMultiplicative();
+            left = { type: 'Binary', op, left, right };
+        }
+        return left;
+    }
+
+    parseMultiplicative() {
+        let left = this.parsePrimary();
+        while (['*', '/', '%'].includes(this.peek().value)) {
+            let op = this.consume().value;
+            let right = this.parsePrimary();
+            left = { type: 'Binary', op, left, right };
+        }
+        return left;
+    }
+
+    parsePrimary() {
+        let t = this.peek();
+        if (t.type === 'NUMBER') {
+            return { type: 'Literal', value: this.consume().value, valType: 'int' };
+        }
+        if (t.type === 'STRING') {
+            return { type: 'Literal', value: this.consume().value, valType: 'string' };
+        }
+        if (t.type === 'IDENT') {
+            return { type: 'Variable', name: this.consume().value };
+        }
+        if (this.match('PUNCT', '(')) {
+            let exp = this.parseExpression();
+            this.expect('PUNCT', ')');
+            return exp;
+        }
+        throw new Error(`Unexpected expression token '${t.value}'`);
+    }
+}
+
+/**
+ * -------------------------------------------------------------
+ * NASM (x86_64 LINUX) CODE GENERATOR
+ * -------------------------------------------------------------
+ */
+class NASMCompiler {
+    constructor() {
+        this.stringTable = [];
+        this.stringCount = 0;
+        this.locals = new Map();
+        this.localOffset = 0;
+        this.labelCount = 0;
+        this.instructions = [];
+    }
+
+    getLabel(prefix = 'L') {
+        return `${prefix}_${this.labelCount++}`;
+    }
+
+    addString(str) {
+        let id = `str_${this.stringCount++}`;
+        this.stringTable.push({ id, value: str });
+        return id;
+    }
+
+    compile(ast) {
+        // Emit entrypoint
+        this.instructions.push("; -----------------------------------------------");
+        this.instructions.push("; Generated by Mini C# to NASM Compiler (x86_64 Linux)");
+        this.instructions.push("; -----------------------------------------------");
+        this.instructions.push("default rel");
+        this.instructions.push("");
+        this.instructions.push("section .text");
+        this.instructions.push("    global _start");
+        this.instructions.push("");
+        this.instructions.push("_start:");
+        this.instructions.push("    push rbp");
+        this.instructions.push("    mov rbp, rsp");
+        this.instructions.push("    sub rsp, 256        ; Reserve local stack space");
+
+        // Compile statements
+        for (let stmt of ast.body) {
+            this.compileStatement(stmt);
+        }
+
+        // Graceful exit using syscall 60 (sys_exit)
+        this.instructions.push("");
+        this.instructions.push("    ; sys_exit(0)");
+        this.instructions.push("    mov rax, 60         ; syscall: exit");
+        this.instructions.push("    xor rdi, rdi        ; exit code 0");
+        this.instructions.push("    syscall");
+
+        // Emit Built-in Runtime Helpers
+        this.emitRuntimeRoutines();
+
+        // Build Data & BSS Sections
+        let dataSection = ["\nsection .rodata"];
+        for (let s of this.stringTable) {
+            let bytes = Array.from(new TextEncoder().encode(s.value)).join(', ');
+            dataSection.push(`    ${s.id}: db ${bytes}`);
+            dataSection.push(`    ${s.id}_len equ $ - ${s.id}`);
+        }
+        dataSection.push("    nl_char: db 10");
+
+        let bssSection = [
+            "\nsection .bss",
+            "    itoa_buffer: resb 32"
+        ];
+
+        return dataSection.join('\n') + '\n' + bssSection.join('\n') + '\n\n' + this.instructions.join('\n');
+    }
+
+    compileStatement(node) {
+        if (!node) return;
+
+        switch (node.type) {
+            case 'VarDecl': {
+                this.localOffset += 8;
+                this.locals.set(node.name, this.localOffset);
+                if (node.init) {
+                    this.compileExpr(node.init);
+                    this.instructions.push(`    mov [rbp - ${this.localOffset}], rax   ; int ${node.name} = expr`);
+                }
+                break;
+            }
+            case 'Assign': {
+                let offset = this.locals.get(node.name);
+                if (!offset) throw new Error(`Undeclared variable '${node.name}'`);
+                this.compileExpr(node.val);
+                this.instructions.push(`    mov [rbp - ${offset}], rax   ; ${node.name} = expr`);
+                break;
+            }
+            case 'Block': {
+                for (let s of node.stmts) this.compileStatement(s);
+                break;
+            }
+            case 'If': {
+                let elseLabel = this.getLabel('else');
+                let endLabel = this.getLabel('endif');
+                this.compileExpr(node.cond);
+                this.instructions.push("    cmp rax, 0");
+                this.instructions.push(`    je ${node.elseBranch ? elseLabel : endLabel}`);
+                this.compileStatement(node.thenBranch);
+                if (node.elseBranch) {
+                    this.instructions.push(`    jmp ${endLabel}`);
+                    this.instructions.push(`${elseLabel}:`);
+                    this.compileStatement(node.elseBranch);
+                }
+                this.instructions.push(`${endLabel}:`);
+                break;
+            }
+            case 'While': {
+                let startLabel = this.getLabel('while_start');
+                let endLabel = this.getLabel('while_end');
+                this.instructions.push(`${startLabel}:`);
+                this.compileExpr(node.cond);
+                this.instructions.push("    cmp rax, 0");
+                this.instructions.push(`    je ${endLabel}`);
+                this.compileStatement(node.body);
+                this.instructions.push(`    jmp ${startLabel}`);
+                this.instructions.push(`${endLabel}:`);
+                break;
+            }
+            case 'Print': {
+                let isStr = node.arg.type === 'Literal' && node.arg.valType === 'string';
+                if (isStr) {
+                    let strId = this.addString(node.arg.value);
+                    this.instructions.push(`    lea rsi, [${strId}]`);
+                    this.instructions.push(`    mov rdx, ${strId}_len`);
+                    this.instructions.push("    call sys_print_string");
+                } else {
+                    this.compileExpr(node.arg);
+                    this.instructions.push("    call sys_print_int");
+                }
+                if (node.method === 'WriteLine') {
+                    this.instructions.push("    call sys_print_newline");
+                }
+                break;
+            }
+        }
+    }
+
+    compileExpr(node) {
+        switch (node.type) {
+            case 'Literal':
+                if (node.valType === 'int') {
+                    this.instructions.push(`    mov rax, ${node.value}`);
+                }
+                break;
+            case 'Variable': {
+                let offset = this.locals.get(node.name);
+                if (!offset) throw new Error(`Unknown variable '${node.name}'`);
+                this.instructions.push(`    mov rax, [rbp - ${offset}]   ; read ${node.name}`);
+                break;
+            }
+            case 'Binary': {
+                this.compileExpr(node.right);
+                this.instructions.push("    push rax");
+                this.compileExpr(node.left);
+                this.instructions.push("    pop rbx");
+
+                switch (node.op) {
+                    case '+': this.instructions.push("    add rax, rbx"); break;
+                    case '-': this.instructions.push("    sub rax, rbx"); break;
+                    case '*': this.instructions.push("    imul rax, rbx"); break;
+                    case '/':
+                        this.instructions.push("    cqo");
+                        this.instructions.push("    idiv rbx");
+                        break;
+                    case '%':
+                        this.instructions.push("    cqo");
+                        this.instructions.push("    idiv rbx");
+                        this.instructions.push("    mov rax, rdx");
+                        break;
+                    case '==':
+                        this.instructions.push("    cmp rax, rbx");
+                        this.instructions.push("    sete al");
+                        this.instructions.push("    movzx rax, al");
+                        break;
+                    case '!=':
+                        this.instructions.push("    cmp rax, rbx");
+                        this.instructions.push("    setne al");
+                        this.instructions.push("    movzx rax, al");
+                        break;
+                    case '<':
+                        this.instructions.push("    cmp rax, rbx");
+                        this.instructions.push("    setl al");
+                        this.instructions.push("    movzx rax, al");
+                        break;
+                    case '<=':
+                        this.instructions.push("    cmp rax, rbx");
+                        this.instructions.push("    setle al");
+                        this.instructions.push("    movzx rax, al");
+                        break;
+                    case '>':
+                        this.instructions.push("    cmp rax, rbx");
+                        this.instructions.push("    setg al");
+                        this.instructions.push("    movzx rax, al");
+                        break;
+                    case '>=':
+                        this.instructions.push("    cmp rax, rbx");
+                        this.instructions.push("    setge al");
+                        this.instructions.push("    movzx rax, al");
+                        break;
+                }
+                break;
+            }
+        }
+    }
+
+    emitRuntimeRoutines() {
+        this.instructions.push(`
+; -----------------------------------------------
+; Syscall Runtime Functions (Linux x86_64)
+; sys_write: rax = 1, rdi = 1 (stdout)
+; -----------------------------------------------
+
+sys_print_string:
+    mov rax, 1          ; sys_write
+    mov rdi, 1          ; fd: stdout
+    syscall
+    ret
+
+sys_print_newline:
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [nl_char]
+    mov rdx, 1
+    syscall
+    ret
+
+sys_print_int:
+    ; Converts value in rax to string & prints to stdout
+    push rbp
+    mov rbp, rsp
+    lea rdi, [itoa_buffer + 31]
+    mov byte [rdi], 0
+    mov rbx, 10
+    mov r8, rax         ; save sign
+    test rax, rax
+    jns .pos
+    neg rax
+.pos:
+.loop:
+    xor rdx, rdx
+    div rbx
+    add dl, '0'
+    dec rdi
+    mov [rdi], dl
+    test rax, rax
+    jnz .loop
+    test r8, r8
+    jns .print
+    dec rdi
+    mov byte [rdi], '-'
+.print:
+    lea rsi, [rdi]
+    lea rdx, [itoa_buffer + 31]
+    sub rdx, rdi        ; compute length
+    mov rax, 1          ; sys_write
+    mov rdi, 1          ; stdout
+    syscall
+    leave
+    ret`);
+    }
+}
+
+/**
+ * -------------------------------------------------------------
+ * UI & INTERACTION CONTROLLER
+ * -------------------------------------------------------------
+ */
+const inputArea = document.getElementById('csharpInput');
+const outputArea = document.getElementById('outputArea');
+const lineNumbers = document.getElementById('lineNumbers');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+
+function updateLineNumbers() {
+    const lines = inputArea.value.split('\n').length;
+    lineNumbers.innerHTML = Array.from({length: lines}, (_, i) => i + 1).join('<br>');
+}
+
+inputArea.addEventListener('input', () => {
+    updateLineNumbers();
+});
+
+inputArea.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = inputArea.selectionStart;
+        const end = inputArea.selectionEnd;
+        inputArea.value = inputArea.value.substring(0, start) + "    " + inputArea.value.substring(end);
+        inputArea.selectionStart = inputArea.selectionEnd = start + 4;
+    }
+});
+
+function loadSample() {
+    const sel = document.getElementById('sampleSelect').value;
+    inputArea.value = SAMPLES[sel];
+    updateLineNumbers();
+    compileCode();
+}
+
+function compileCode() {
+    const code = inputArea.value;
+    try {
+        const lexer = new Lexer(code);
+        const tokens = lexer.tokenize();
+        const parser = new Parser(tokens);
+        const ast = parser.parseProgram();
+        const compiler = new NASMCompiler();
+        const asm = compiler.compile(ast);
+
+        outputArea.textContent = asm;
+        statusDot.className = "status-dot";
+        statusText.textContent = "Compilation Successful (ELF64)";
+    } catch (err) {
+        outputArea.textContent = `; COMPILATION ERROR:\n; ${err.message}`;
+        statusDot.className = "status-dot error";
+        statusText.textContent = `Error: ${err.message}`;
+    }
+}
+
+function copyASM() {
+    navigator.clipboard.writeText(outputArea.textContent).then(() => {
+        const orig = statusText.textContent;
+        statusText.textContent = "NASM code copied to clipboard!";
+        setTimeout(() => { statusText.textContent = orig; }, 2000);
+    });
+}
+
+// Initial Boot
+loadSample();
+</script>
+</body>
+</html>
