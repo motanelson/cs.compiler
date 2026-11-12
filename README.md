@@ -1,4 +1,2 @@
-3d memory writer x y z  writer
-
-
+Csharp compiler into nasm compiler
 
